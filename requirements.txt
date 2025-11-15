@@ -1,0 +1,5 @@
+lmstudio
+websockets
+pyvts
+pygame
+
