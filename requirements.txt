@@ -1,5 +1,2 @@
 lmstudio
 websockets
-pyvts
-pygame
-
