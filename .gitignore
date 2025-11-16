@@ -1,5 +1,4 @@
 .env
-.venv
 token.txt
 null
 config.py
@@ -9,3 +8,4 @@ __pycache__
 models
 animations
 .ini
+animations
