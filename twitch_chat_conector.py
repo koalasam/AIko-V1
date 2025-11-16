@@ -1,5 +1,6 @@
 import asyncio
 import websockets
+import json
 from config import TWITCH_CHANEL_NAME, TWITCH_ACCESS_TOKEN
 
 class TwitchChatMonitor:
@@ -14,8 +15,9 @@ class TwitchChatMonitor:
         uri = "wss://irc-ws.chat.twitch.tv:443"
         self.ws = await websockets.connect(uri)
         
-        # Authenticate
-        await self.ws.send(f"PASS oauth:{self.token}")
+        # Authenticate - token should not include 'oauth:' prefix if already included
+        token = self.token.replace("oauth:", "")
+        await self.ws.send(f"PASS oauth:{token}")
         await self.ws.send(f"NICK {self.channel}")
         
         # Request capabilities for tags (user info, etc.)
@@ -24,7 +26,14 @@ class TwitchChatMonitor:
         # Join the channel
         await self.ws.send(f"JOIN #{self.channel}")
         
-        print(f"Connected to #{self.channel}")
+        # Wait for connection confirmation
+        async for message in self.ws:
+            print(f"Server: {message}")
+            if "366" in message or "JOIN" in message:  # End of NAMES list or JOIN confirmation
+                print(f"Successfully connected to #{self.channel}")
+                break
+            if "NOTICE" in message and "authentication failed" in message.lower():
+                raise Exception("Authentication failed. Check your OAuth token.")
         
     async def handle_message(self, raw_message):
         """Parse and handle incoming IRC messages"""
@@ -84,9 +93,15 @@ class TwitchChatMonitor:
                     await self.handle_message(raw_message)
                 except asyncio.TimeoutError:
                     continue
+                except websockets.exceptions.ConnectionClosed:
+                    print("Connection closed by server. Reconnecting...")
+                    await asyncio.sleep(2)
+                    await self.connect()
                     
         except KeyboardInterrupt:
             print("\nStopping chat monitor...")
+        except Exception as e:
+            print(f"Error: {e}")
         finally:
             if self.ws:
                 await self.ws.close()
@@ -100,7 +115,7 @@ async def main():
     monitor = TwitchChatMonitor()
     
     # Listen for 60 seconds (change or remove duration parameter for continuous listening)
-    await monitor.listen(duration=60)
+    await monitor.listen()
     
     # Print summary
     print(f"\n{'='*50}")

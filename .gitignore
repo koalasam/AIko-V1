@@ -1,3 +1,11 @@
 .env
+.venv
+token.txt
+null
 config.py
 system_prompt.py
+__pycache__
+.pyc
+models
+animations
+.ini

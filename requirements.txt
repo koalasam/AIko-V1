@@ -1,5 +1,4 @@
 lmstudio
 websockets
-pyvts
-pygame
-
+pytchat
+tk
