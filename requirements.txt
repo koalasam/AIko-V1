@@ -1,2 +1,4 @@
 lmstudio
 websockets
+pytchat
+tk
