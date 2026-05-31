@@ -1,10 +1,11 @@
-from system_prompt import SYSTEM_PROMPT
-from config import LLM_MODEL
-import lmstudio as lms
+import lmstudio as lms 
 import asyncio
 import re
 
+LLM_MODEL = "google/gemma-3-4b"
+SYSTEM_PROMPT = "This is a test prompt to be ignored"
 
+# Conection object for LM Studio
 class LLM():
     def __init__ (self):
         self.model = lms.llm(LLM_MODEL)
@@ -18,11 +19,11 @@ class LLM():
             self.chat.add_user_message(prompt)
             return self.remove_think(self.model.respond(self.chat,on_message=self.chat.append,)).strip()
 
-# Test_Mode
+# Test mode
 if __name__ == "__main__":
     llm = LLM()
     while True:
-        user_input = input("(leave blank to exit) User: ")
+        user_input = input("    (leave blank to exit) User: ")
         if user_input == "":
             exit()
-        print(f"bot: {asyncio.run(llm.responce(user_input))}")
+        print(f"    bot: {asyncio.run(llm.responce(user_input))}")

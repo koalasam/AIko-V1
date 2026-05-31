@@ -1,4 +1,3 @@
-lmstudio
 websockets
 pytchat
-tk
+python-dotenv
