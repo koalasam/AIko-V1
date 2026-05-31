@@ -1,0 +1,151 @@
+# =============================================================================
+# AIko-V1 -- docker-compose.yml
+# =============================================================================
+# Services defined here:
+#   llm_lmstudio  -- WebSocket server (llm_interface.py + llm.py)
+#                    Receives chat messages, calls an OpenAI-compatible LLM
+#                    endpoint (LM Studio or any other), returns responses.
+#   chat          -- WebSocket client (chat_interface.py)
+#                    Monitors YouTube/Twitch and forwards messages to llm_lmstudio.
+#
+# LM Studio can run anywhere reachable by the container:
+#   - Same machine as Docker  → use http://host.docker.internal:1234/v1
+#   - Separate machine on LAN → use its LAN IP, e.g. http://10.100.0.166:1234/v1
+#   - Any OpenAI-compatible API (OpenAI, Ollama, vLLM…) → set LLM_API_BASE + LLM_API_KEY
+#
+# Quickstart:
+#   1. Copy config.env.example → .env and fill in your values
+#   2. docker compose up --build
+#
+# Other useful commands:
+#   docker compose up --build llm_lmstudio   # rebuild + start just the LLM server
+#   docker compose logs -f chat              # tail chat service logs
+#   docker compose restart llm_lmstudio      # hot-restart after code change
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # llm_openai_compatible
+  # Runs llm_interface.py (WebSocket server) + llm.py (OpenAI-compatible client).
+  # Binds the WebSocket on 0.0.0.0:8765 so the `chat` container can reach it.
+  # Calls whatever OpenAI-compatible endpoint LLM_API_BASE points at -- this
+  # can be LM Studio on the same host, a LAN machine, or a cloud API.
+  # ---------------------------------------------------------------------------
+  llm_openai_compatible:
+    build:
+      context: ./llm_openai_compatible       # contains: llm.py, llm_interface.py, requirements.txt, Dockerfile
+      dockerfile: Dockerfile
+    container_name: aiko_llm
+    restart: unless-stopped
+
+    ports:
+      - "${WS_PORT:-8765}:8765"      # WebSocket reachable from host and other containers
+
+    environment:
+      # Bind the WebSocket server to all interfaces inside the container.
+      WS_HOST: "0.0.0.0"
+      WS_PORT: "${WS_PORT:-8765}"
+
+      # OpenAI-compatible LLM endpoint ---
+      # If LM Studio runs on the same Docker host use http://host.docker.internal:1234/v1
+      # If it runs on another LAN machine use its IP, e.g. http://10.100.0.166:1234/v1
+      # For real OpenAI set https://api.openai.com/v1 and a proper API key.
+      LLM_API_BASE:      "${LLM_API_BASE:-http://10.100.0.166:1234/v1}"
+      LLM_API_KEY:       "${LLM_API_KEY:-lm-studio}"
+      LLM_MODEL:         "${LLM_MODEL:-google/gemma-4-e4b}"
+      LLM_SYSTEM_PROMPT: "${LLM_SYSTEM_PROMPT:-test prompt to be ignored}"
+
+    # Allows the container to reach LM Studio on the Docker host via
+    # host.docker.internal (needed on Linux; Docker Desktop handles it automatically).
+    # Safe to leave in even when using a LAN IP -- it just goes unused.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    networks:
+      - aiko_net
+
+    healthcheck:
+      # Wait until the WebSocket port is accepting TCP connections before
+      # allowing dependent services (chat) to start.
+      test: ["CMD-SHELL", "nc -z localhost 8765 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+
+  # ---------------------------------------------------------------------------
+  # chat
+  # Runs chat_interface.py -- monitors YouTube/Twitch and sends messages to
+  # llm_lmstudio over the internal Docker network.
+  # Waits for llm_lmstudio to pass its healthcheck before starting.
+  # ---------------------------------------------------------------------------
+  chat:
+    build:
+      context: ./chat                # contains: chat_interface.py, connectors, requirements.txt, Dockerfile
+      dockerfile: Dockerfile
+    container_name: aiko_chat
+    restart: unless-stopped
+
+    depends_on:
+      llm_openai_compatible:
+        condition: service_healthy   # don't start until the WebSocket server is ready
+
+    environment:
+      # Docker service name resolves as hostname on aiko_net.
+      WS_HOST:         "llm_lmstudio"
+      WS_PORT:         "${WS_PORT:-8765}"
+
+      YOUTUBE_VIDEO_ID: "${YOUTUBE_VIDEO_ID:-}"
+      TWITCH_CHANNEL:   "${TWITCH_CHANNEL:-}"
+      ENABLE_YOUTUBE:   "${ENABLE_YOUTUBE:-true}"
+      ENABLE_TWITCH:    "${ENABLE_TWITCH:-true}"
+      RESTART_DELAY:    "${RESTART_DELAY:-5}"
+
+    networks:
+      - aiko_net
+
+
+# =============================================================================
+# TEMPLATE -- Add a new AIko service
+# =============================================================================
+# Copy the block below, uncomment it, and replace <SERVICE_NAME> throughout.
+# Paste it inside the `services:` section above, before the networks block.
+#
+#  <SERVICE_NAME>:
+#    build:
+#      context: ./<SERVICE_NAME>      # folder with Dockerfile + source files
+#      dockerfile: Dockerfile
+#    container_name: aiko_<SERVICE_NAME>
+#    restart: unless-stopped
+#
+#    depends_on:
+#      llm_lmstudio:                  # remove if this service doesn't need the LLM server
+#        condition: service_healthy
+#
+#    ports:
+#      - "<HOST_PORT>:<CONTAINER_PORT>"  # only if reachable from outside Docker
+#
+#    environment:
+#      WS_HOST:         "llm_lmstudio"   # change to whichever service it talks to
+#      WS_PORT:         "${WS_PORT:-8765}"
+#      SOME_VAR:        "${SOME_VAR:-default}"
+#      LLM_API_BASE:    "${LLM_API_BASE:-http://host.docker.internal:1234/v1}"  # if it also calls LLM directly
+#
+#    extra_hosts:
+#      - "host.docker.internal:host-gateway"  # only if service needs to reach Docker host
+#
+#    networks:
+#      - aiko_net
+#
+# =============================================================================
+
+
+# ---------------------------------------------------------------------------
+# Shared bridge network.
+# All containers use service names as hostnames (e.g. "llm_lmstudio:8765").
+# ---------------------------------------------------------------------------
+networks:
+  aiko_net:
+    driver: bridge
