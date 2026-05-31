@@ -2,7 +2,7 @@ import lmstudio as lms
 import asyncio
 import re
 
-LLM_MODEL = "google/gemma-3-4b"
+LLM_MODEL = "google/gemma-4-e4b"
 SYSTEM_PROMPT = "This is a test prompt to be ignored"
 
 # Conection object for LM Studio
