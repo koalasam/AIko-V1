@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stream Chat Hub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <!-- ===== TOP BAR ===================================================== -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="logo">◈ STREAM HUB</span>
+      <span class="version">v1.0</span>
+    </div>
+    <div class="topbar-center">
+      <div class="status-pill" id="status-chat">
+        <span class="dot"></span><span class="label">CHAT</span>
+      </div>
+      <div class="status-pill" id="status-llm">
+        <span class="dot"></span><span class="label">LLM</span>
+      </div>
+      <div class="status-pill" id="status-ws">
+        <span class="dot"></span><span class="label">UI WS</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="metric">
+        <span class="metric-label">QUEUE</span>
+        <span class="metric-value" id="hdr-queue">0</span>
+      </div>
+      <div class="metric">
+        <span class="metric-label">IN FLIGHT</span>
+        <span class="metric-value" id="hdr-inflight">0</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== MAIN LAYOUT ================================================= -->
+  <main class="layout">
+
+    <!-- LEFT COLUMN: Chat feed + Input -->
+    <section class="panel" id="panel-chat">
+      <div class="panel-header">
+        <span class="panel-title">INCOMING CHAT</span>
+        <button class="icon-btn" id="btn-clear-chat" title="Clear display">✕</button>
+      </div>
+      <div class="feed" id="feed-chat"></div>
+    </section>
+
+    <!-- CENTER COLUMN: LLM responses -->
+    <section class="panel" id="panel-responses">
+      <div class="panel-header">
+        <span class="panel-title">LLM RESPONSES</span>
+        <button class="icon-btn" id="btn-clear-resp" title="Clear display">✕</button>
+      </div>
+      <div class="feed" id="feed-responses"></div>
+    </section>
+
+    <!-- RIGHT COLUMN: Controls -->
+    <aside class="sidebar">
+
+      <!-- Queue settings -->
+      <div class="card" id="card-queue">
+        <div class="card-title">QUEUE SETTINGS</div>
+
+        <div class="field">
+          <label class="field-label">MODE</label>
+          <div class="toggle-group">
+            <button class="toggle-btn active" id="btn-priority" data-mode="priority">
+              USER PRIORITY
+            </button>
+            <button class="toggle-btn" id="btn-fifo" data-mode="fifo">
+              FIFO
+            </button>
+          </div>
+          <p class="field-hint" id="mode-hint">UI messages jump the queue.</p>
+        </div>
+
+        <div class="field">
+          <label class="field-label">CONCURRENCY  <span class="mono" id="concurrency-val">1</span></label>
+          <div class="slider-row">
+            <span class="mono">1</span>
+            <input type="range" id="slider-concurrency" min="1" max="20" value="1" />
+            <span class="mono">20</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label">QUEUE STATUS</label>
+          <div class="queue-bar-wrap">
+            <div class="queue-bar" id="queue-bar"></div>
+          </div>
+          <div class="queue-stats">
+            <span>Waiting: <b id="stat-queue">0</b></span>
+            <span>Processing: <b id="stat-inflight">0</b></span>
+          </div>
+          <button class="btn-danger" id="btn-clear-queue">CLEAR QUEUE</button>
+        </div>
+      </div>
+
+      <!-- Manual input -->
+      <div class="card" id="card-input">
+        <div class="card-title">MANUAL MESSAGE</div>
+        <div class="field">
+          <label class="field-label">USERNAME</label>
+          <input class="text-input" type="text" id="input-username" value="Moderator" maxlength="32" />
+        </div>
+        <div class="field">
+          <label class="field-label">MESSAGE</label>
+          <textarea class="text-input" id="input-message" rows="3" placeholder="Type a message to inject…"></textarea>
+        </div>
+        <button class="btn-primary" id="btn-send">SEND  ↵</button>
+      </div>
+
+      <!-- Flag log -->
+      <div class="card" id="card-flags">
+        <div class="card-title">FLAG LOG  <span class="badge" id="flag-count">0</span></div>
+        <div class="flag-list" id="flag-list">
+          <p class="empty-hint">No flags yet.</p>
+        </div>
+        <button class="btn-ghost" id="btn-clear-flags">CLEAR FLAGS</button>
+      </div>
+
+    </aside>
+  </main>
+
+  <!-- ===== FLAG MODAL ================================================== -->
+  <div class="modal-overlay hidden" id="modal-overlay">
+    <div class="modal">
+      <div class="modal-title">FLAG MESSAGE</div>
+      <p class="modal-body" id="modal-body"></p>
+      <div class="field">
+        <label class="field-label">REASON (optional)</label>
+        <input class="text-input" type="text" id="modal-reason" placeholder="e.g. spam, off-topic, review…" />
+      </div>
+      <div class="modal-actions">
+        <button class="btn-danger"  id="modal-confirm">FLAG</button>
+        <button class="btn-ghost"   id="modal-cancel">CANCEL</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

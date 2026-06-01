@@ -6,8 +6,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY llm.py llm_interface.py config.env ./
+COPY server.py config.env ./
+COPY static/app.js static/index.html static/style.css ./static/
 
 EXPOSE 8080
 
-CMD ["python", "llm_interface.py"]
+CMD ["python", "server.py"]
