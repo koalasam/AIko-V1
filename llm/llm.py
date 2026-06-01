@@ -11,7 +11,6 @@ API_KEY     = os.getenv("LLM_API_KEY", "lm-studio")   # many local servers accep
 API_BASE    = os.getenv("LLM_API_BASE", "http://localhost:1234/v1")
 SYSTEM_PROMPT = os.getenv("LLM_SYSTEM_PROMPT", "This is a test prompt to be ignored")
 
-
 class LLM:
     def __init__(self):
         self.client = OpenAI(api_key=API_KEY, base_url=API_BASE)
@@ -40,13 +39,3 @@ class LLM:
         self.history.append({"role": "assistant", "content": assistant_text})
 
         return assistant_text
-
-
-# Test mode
-if __name__ == "__main__":
-    llm = LLM()
-    while True:
-        user_input = input("    (leave blank to exit) User: ")
-        if user_input == "":
-            exit()
-        print(f"    bot: {asyncio.run(llm.responce(user_input))}")

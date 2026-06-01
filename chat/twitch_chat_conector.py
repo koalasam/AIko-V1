@@ -1,6 +1,5 @@
 import asyncio
 
-
 class TwitchChatMonitor:
     def __init__(self, channel_name: str):
         self.host = "irc.chat.twitch.tv"
@@ -115,22 +114,3 @@ class TwitchChatMonitor:
 
     def get_messages(self):
         return self.messages
-
-
-async def main():
-    import os
-    from dotenv import load_dotenv
-    load_dotenv("config.env")
-    channel = os.getenv("TWITCH_CHANNEL", "")
-    if not channel:
-        print("Set TWITCH_CHANNEL in config.env")
-        return
-    monitor = TwitchChatMonitor(channel_name=channel)
-    await monitor.listen(duration=60)
-    print(f"\nTotal messages: {len(monitor.get_messages())}")
-    for msg in monitor.get_messages():
-        print(msg)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

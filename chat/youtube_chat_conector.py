@@ -2,7 +2,6 @@ import asyncio
 import pytchat
 from datetime import datetime, timezone
 
-
 class YouTubeChatMonitor:
     def __init__(self, video_id: str):
         self.video_id = video_id
@@ -83,22 +82,3 @@ class YouTubeChatMonitor:
 
     def get_messages(self):
         return self.messages
-
-
-async def main():
-    import os
-    from dotenv import load_dotenv
-    load_dotenv("config.env")
-    video_id = os.getenv("YOUTUBE_VIDEO_ID", "")
-    if not video_id:
-        print("Set YOUTUBE_VIDEO_ID in config.env")
-        return
-    monitor = YouTubeChatMonitor(video_id=video_id)
-    await monitor.listen()
-    print(f"\nTotal messages: {len(monitor.get_messages())}")
-    for msg in monitor.get_messages():
-        print(msg)
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

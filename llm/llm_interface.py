@@ -1,24 +1,7 @@
-"""
-llm_interface.py  (updated for webui hub)
-------------------------------------------
-Connects to the webui hub server as the LLM worker.
-- Receives chat messages forwarded by the hub  (role: llm consumer)
-- Sends responses back to the hub              (role: llm producer)
-
-Config keys used (config.env):
-    WS_HUB_HOST      (default: localhost)
-    WS_HUB_PORT      (default: 8765)
-    RESTART_DELAY    (default: 5)
-
-Usage:
-    python llm_interface.py
-"""
-
 import asyncio
 import json
 import os
 from pathlib import Path
-
 import websockets
 from dotenv import load_dotenv
 from llm import LLM

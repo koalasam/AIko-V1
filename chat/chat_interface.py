@@ -1,24 +1,7 @@
-"""
-chat_interface.py
--------------------------------------------
-connects to the webui hub at /ws/chat
-
-Config keys (config.env):
-    YOUTUBE_VIDEO_ID, TWITCH_CHANNEL
-    WS_HUB_HOST   (default: localhost)
-    WS_HUB_PORT   (default: 8765)
-    RESTART_DELAY (default: 5)
-    ENABLE_YOUTUBE / ENABLE_TWITCH
-
-Usage:
-    python chat_interface_updated.py
-"""
-
 import asyncio
 import json
 import os
 from pathlib import Path
-
 import websockets
 from dotenv import load_dotenv
 from youtube_chat_conector import YouTubeChatMonitor
