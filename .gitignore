@@ -1,0 +1,6 @@
+/GPT-SoVITS/*
+/input_audio/*
+/output_audio/*
+*.env
+*/__pycache__
+*/.venv
