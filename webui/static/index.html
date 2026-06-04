@@ -15,7 +15,7 @@
   <header class="topbar">
     <div class="topbar-left">
       <span class="logo">◈ STREAM HUB</span>
-      <span class="version">v1.0</span>
+      <span class="version">v1.1</span>
     </div>
     <div class="topbar-center">
       <div class="status-pill" id="status-chat">
@@ -23,6 +23,12 @@
       </div>
       <div class="status-pill" id="status-llm">
         <span class="dot"></span><span class="label">LLM</span>
+      </div>
+      <div class="status-pill" id="status-tts">
+        <span class="dot"></span><span class="label">TTS</span>
+      </div>
+      <div class="status-pill" id="status-audio">
+        <span class="dot"></span><span class="label">AUDIO</span>
       </div>
       <div class="status-pill" id="status-ws">
         <span class="dot"></span><span class="label">UI WS</span>
@@ -37,13 +43,17 @@
         <span class="metric-label">IN FLIGHT</span>
         <span class="metric-value" id="hdr-inflight">0</span>
       </div>
+      <div class="metric">
+        <span class="metric-label">AUDIO Q</span>
+        <span class="metric-value" id="hdr-audioqueue">0</span>
+      </div>
     </div>
   </header>
 
   <!-- ===== MAIN LAYOUT ================================================= -->
   <main class="layout">
 
-    <!-- LEFT COLUMN: Chat feed + Input -->
+    <!-- LEFT COLUMN: Chat feed -->
     <section class="panel" id="panel-chat">
       <div class="panel-header">
         <span class="panel-title">INCOMING CHAT</span>
@@ -71,12 +81,8 @@
         <div class="field">
           <label class="field-label">MODE</label>
           <div class="toggle-group">
-            <button class="toggle-btn active" id="btn-priority" data-mode="priority">
-              USER PRIORITY
-            </button>
-            <button class="toggle-btn" id="btn-fifo" data-mode="fifo">
-              FIFO
-            </button>
+            <button class="toggle-btn active" id="btn-priority">USER PRIORITY</button>
+            <button class="toggle-btn" id="btn-fifo">FIFO</button>
           </div>
           <p class="field-hint" id="mode-hint">UI messages jump the queue.</p>
         </div>
@@ -100,6 +106,53 @@
             <span>Processing: <b id="stat-inflight">0</b></span>
           </div>
           <button class="btn-danger" id="btn-clear-queue">CLEAR QUEUE</button>
+        </div>
+      </div>
+
+      <!-- TTS settings -->
+      <div class="card" id="card-tts">
+        <div class="card-title">
+          TEXT-TO-SPEECH
+          <span class="tts-playing-badge hidden" id="tts-playing-badge">● SPEAKING</span>
+        </div>
+
+        <div class="field">
+          <label class="field-label">TTS OUTPUT</label>
+          <div class="toggle-group">
+            <button class="toggle-btn active" id="btn-tts-on">ENABLED</button>
+            <button class="toggle-btn" id="btn-tts-off">DISABLED</button>
+          </div>
+          <p class="field-hint">When enabled, LLM responses are sent to the TTS worker and queued for playback.</p>
+        </div>
+
+        <div class="field">
+          <label class="field-label">AUDIO QUEUE</label>
+          <div class="queue-bar-wrap">
+            <div class="queue-bar" id="audio-queue-bar"></div>
+          </div>
+          <div class="queue-stats">
+            <span>Pending: <b id="stat-audio-queue">0</b></span>
+            <span id="audio-now-playing" class="hidden">Now playing ●</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="field-label">VOLUME  <span class="mono" id="volume-val">100%</span></label>
+          <div class="slider-row">
+            <span class="mono">0</span>
+            <input type="range" id="slider-volume" min="0" max="100" value="100" />
+            <span class="mono">100</span>
+          </div>
+        </div>
+
+        <div class="field tts-btn-row">
+          <button class="btn-secondary" id="btn-audio-skip">⏭ SKIP</button>
+          <button class="btn-danger"    id="btn-audio-clear">✕ CLEAR AUDIO QUEUE</button>
+        </div>
+
+        <div class="field">
+          <label class="field-label">CURRENT FILE</label>
+          <div class="current-file-display" id="current-file-display">—</div>
         </div>
       </div>
 
@@ -139,8 +192,8 @@
         <input class="text-input" type="text" id="modal-reason" placeholder="e.g. spam, off-topic, review…" />
       </div>
       <div class="modal-actions">
-        <button class="btn-danger"  id="modal-confirm">FLAG</button>
-        <button class="btn-ghost"   id="modal-cancel">CANCEL</button>
+        <button class="btn-danger" id="modal-confirm">FLAG</button>
+        <button class="btn-ghost"  id="modal-cancel">CANCEL</button>
       </div>
     </div>
   </div>

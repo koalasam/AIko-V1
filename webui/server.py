@@ -3,17 +3,10 @@ server.py -- WebUI Hub Server
 Central WebSocket hub that:
   - Receives chat messages from chat_interface.py  (role: "chat")
   - Forwards messages to llm_interface.py          (role: "llm")
+  - Forwards LLM responses to tts_interface.py     (role: "tts")
+  - Receives audio status from audiostreamer.py    (role: "audiostatus")
   - Broadcasts everything to browser clients       (role: "ui")
   - Accepts manual messages typed in the UI
-
-All configuration is loaded from config.env in the project root or same directory.
-
-Usage:
-    python server.py
-    Then open http://localhost:8080 in your browser.
-
-The chat_interface.py and llm_interface.py must be updated to point at this
-server's WS_HUB_PORT instead of talking directly to each other.
 """
 
 import asyncio
@@ -37,11 +30,12 @@ for env_path in ["../config.env", "config.env", "../llm/config.env"]:
         load_dotenv(env_path)
         break
 
-WS_HUB_HOST       = os.getenv("WS_HUB_HOST", "localhost")
-WS_HUB_PORT       = int(os.getenv("WS_HUB_PORT", "8765"))
-UI_HOST           = os.getenv("UI_HOST", "0.0.0.0")
-UI_PORT           = int(os.getenv("UI_PORT", "8080"))
+WS_HUB_HOST         = os.getenv("WS_HUB_HOST", "localhost")
+WS_HUB_PORT         = int(os.getenv("WS_HUB_PORT", "8765"))
+UI_HOST             = os.getenv("UI_HOST", "0.0.0.0")
+UI_PORT             = int(os.getenv("UI_PORT", "8080"))
 DEFAULT_CONCURRENCY = int(os.getenv("DEFAULT_CONCURRENCY", "1"))
+TTS_ENABLED_DEFAULT = os.getenv("TTS_ENABLED", "true").lower() == "true"
 
 # ---------------------------------------------------------------------------
 # FastAPI app
@@ -62,22 +56,30 @@ async def index():
 class Hub:
     def __init__(self):
         # Connected clients by role
-        self.ui_clients:   set[WebSocket] = set()
-        self.llm_client:   WebSocket | None = None
-        self.chat_client:  WebSocket | None = None
+        self.ui_clients:    set[WebSocket] = set()
+        self.llm_client:    WebSocket | None = None
+        self.chat_client:   WebSocket | None = None
+        self.tts_client:    WebSocket | None = None
 
         # Message queue: deque of message dicts (with metadata)
         self.queue: deque[dict] = deque()
 
         # Settings
-        self.concurrency:    int  = DEFAULT_CONCURRENCY
-        self.priority_mode:  bool = True   # True = user-priority, False = FIFO
+        self.concurrency:   int  = DEFAULT_CONCURRENCY
+        self.priority_mode: bool = True
+        self.tts_enabled:   bool = TTS_ENABLED_DEFAULT
 
-        # Track how many LLM responses are currently in-flight
+        # In-flight LLM tracking
         self._in_flight: int = 0
         self._queue_event = asyncio.Event()
 
-        # All messages ever (for UI reconnect replay, capped at 500)
+        # Audio streamer status (reported by audiostreamer.py)
+        self.audio_playing:      bool  = False
+        self.audio_current_file: str   = ""
+        self.audio_queue_length: int   = 0
+        self.audio_volume:       float = 1.0
+
+        # Logs (capped)
         self.chat_log:     deque[dict] = deque(maxlen=500)
         self.response_log: deque[dict] = deque(maxlen=500)
 
@@ -86,7 +88,6 @@ class Hub:
     # ------------------------------------------------------------------
 
     async def broadcast_ui(self, payload: dict):
-        """Send a JSON payload to all connected browser clients."""
         dead = set()
         msg = json.dumps(payload)
         for ws in self.ui_clients:
@@ -97,7 +98,6 @@ class Hub:
         self.ui_clients -= dead
 
     async def send_to_llm(self, payload: dict):
-        """Forward a message to the connected LLM worker."""
         if self.llm_client:
             try:
                 await self.llm_client.send_text(json.dumps(payload))
@@ -107,24 +107,29 @@ class Hub:
                 await self.broadcast_ui({"type": "status", "llm_connected": False})
         return False
 
+    async def send_to_tts(self, payload: dict):
+        """Forward an LLM response to the TTS worker (if enabled and connected)."""
+        if not self.tts_enabled:
+            return
+        if self.tts_client:
+            try:
+                await self.tts_client.send_text(json.dumps(payload))
+            except Exception:
+                self.tts_client = None
+                await self.broadcast_ui({"type": "status", "tts_connected": False})
+
     # ------------------------------------------------------------------
     # Queue management
     # ------------------------------------------------------------------
 
     def enqueue(self, msg: dict):
-        """Add a message to the processing queue."""
         if self.priority_mode and msg.get("source") == "ui":
-            # UI messages jump to the front
             self.queue.appendleft(msg)
         else:
             self.queue.append(msg)
         self._queue_event.set()
 
     async def dispatcher(self):
-        """
-        Background task: drain queue respecting concurrency limit.
-        Wakes up whenever a new item is enqueued or a response returns.
-        """
         while True:
             await self._queue_event.wait()
             self._queue_event.clear()
@@ -139,7 +144,6 @@ class Hub:
                 })
                 success = await self.send_to_llm(msg)
                 if not success:
-                    # LLM not connected — put it back and wait
                     self.queue.appendleft(msg)
                     self._in_flight -= 1
                     break
@@ -151,9 +155,8 @@ class Hub:
             })
 
     def response_received(self):
-        """Called when LLM returns a response; decrements in-flight counter."""
         self._in_flight = max(0, self._in_flight - 1)
-        self._queue_event.set()   # wake dispatcher
+        self._queue_event.set()
 
 
 hub = Hub()
@@ -165,13 +168,18 @@ hub = Hub()
 @app.get("/api/status")
 async def status():
     return {
-        "llm_connected":  hub.llm_client is not None,
-        "chat_connected": hub.chat_client is not None,
-        "ui_clients":     len(hub.ui_clients),
-        "queue_length":   len(hub.queue),
-        "in_flight":      hub._in_flight,
-        "concurrency":    hub.concurrency,
-        "priority_mode":  hub.priority_mode,
+        "llm_connected":       hub.llm_client is not None,
+        "chat_connected":      hub.chat_client is not None,
+        "tts_connected":       hub.tts_client is not None,
+        "ui_clients":          len(hub.ui_clients),
+        "queue_length":        len(hub.queue),
+        "in_flight":           hub._in_flight,
+        "concurrency":         hub.concurrency,
+        "priority_mode":       hub.priority_mode,
+        "tts_enabled":         hub.tts_enabled,
+        "audio_playing":       hub.audio_playing,
+        "audio_queue_length":  hub.audio_queue_length,
+        "audio_volume":        hub.audio_volume,
     }
 
 
@@ -183,17 +191,21 @@ async def ws_ui(websocket: WebSocket):
     await websocket.accept()
     hub.ui_clients.add(websocket)
 
-    # Send current state on connect
     await websocket.send_text(json.dumps({
-        "type": "init",
-        "concurrency":   hub.concurrency,
-        "priority_mode": hub.priority_mode,
-        "queue_length":  len(hub.queue),
-        "in_flight":     hub._in_flight,
+        "type":           "init",
+        "concurrency":    hub.concurrency,
+        "priority_mode":  hub.priority_mode,
+        "tts_enabled":    hub.tts_enabled,
+        "queue_length":   len(hub.queue),
+        "in_flight":      hub._in_flight,
         "llm_connected":  hub.llm_client is not None,
         "chat_connected": hub.chat_client is not None,
-        "chat_log":      list(hub.chat_log),
-        "response_log":  list(hub.response_log),
+        "tts_connected":  hub.tts_client is not None,
+        "audio_playing":       hub.audio_playing,
+        "audio_queue_length":  hub.audio_queue_length,
+        "audio_volume":        hub.audio_volume,
+        "chat_log":       list(hub.chat_log),
+        "response_log":   list(hub.response_log),
     }))
 
     try:
@@ -205,7 +217,6 @@ async def ws_ui(websocket: WebSocket):
 
             action = data.get("action")
 
-            # -- Settings changes --
             if action == "set_concurrency":
                 hub.concurrency = max(1, int(data.get("value", 1)))
                 await hub.broadcast_ui({"type": "settings", "concurrency": hub.concurrency})
@@ -215,7 +226,10 @@ async def ws_ui(websocket: WebSocket):
                 hub.priority_mode = bool(data.get("value", True))
                 await hub.broadcast_ui({"type": "settings", "priority_mode": hub.priority_mode})
 
-            # -- Manual message from UI --
+            elif action == "set_tts_enabled":
+                hub.tts_enabled = bool(data.get("value", True))
+                await hub.broadcast_ui({"type": "settings", "tts_enabled": hub.tts_enabled})
+
             elif action == "send_message":
                 text = data.get("message", "").strip()
                 if not text:
@@ -232,24 +246,28 @@ async def ws_ui(websocket: WebSocket):
                 await hub.broadcast_ui({"type": "chat_message", **msg})
                 hub.enqueue(msg)
 
-            # -- Flag a message --
             elif action == "flag_message":
                 payload = {
-                    "type":    "flag",
-                    "msg_id":  data.get("msg_id"),
-                    "kind":    data.get("kind", "chat"),  # "chat" | "response"
-                    "reason":  data.get("reason", ""),
+                    "type":   "flag",
+                    "msg_id": data.get("msg_id"),
+                    "kind":   data.get("kind", "chat"),
+                    "reason": data.get("reason", ""),
                 }
                 await hub.broadcast_ui(payload)
 
-            # -- Clear queue --
             elif action == "clear_queue":
                 hub.queue.clear()
                 await hub.broadcast_ui({
-                    "type": "queue_update",
+                    "type":         "queue_update",
                     "queue_length": 0,
-                    "in_flight": hub._in_flight,
+                    "in_flight":    hub._in_flight,
                 })
+
+            # -- Audio streamer control commands (forwarded via hub) --
+            elif action in ("audio_skip", "audio_clear", "audio_set_volume"):
+                # We relay these to the audio streamer via its own WS (port 8081).
+                # The UI sends these; server proxies them for convenience.
+                await hub.broadcast_ui({"type": "audio_command", "action": action, **data})
 
     except WebSocketDisconnect:
         pass
@@ -283,7 +301,6 @@ async def ws_chat(websocket: WebSocket):
                 "message":  data.get("message", ""),
                 "source":   "chat",
             }
-
             hub.chat_log.append(msg)
             await hub.broadcast_ui({"type": "chat_message", **msg})
             hub.enqueue(msg)
@@ -305,7 +322,7 @@ async def ws_llm(websocket: WebSocket):
     hub.llm_client = websocket
     print("[Hub] llm_interface connected.")
     await hub.broadcast_ui({"type": "status", "llm_connected": True})
-    hub._queue_event.set()  # flush anything waiting
+    hub._queue_event.set()
 
     try:
         async for raw in websocket.iter_text():
@@ -327,6 +344,10 @@ async def ws_llm(websocket: WebSocket):
             }
             hub.response_log.append(resp)
             await hub.broadcast_ui({"type": "llm_response", **resp})
+
+            # Forward to TTS if enabled
+            await hub.send_to_tts(resp)
+
             hub.response_received()
 
     except WebSocketDisconnect:
@@ -338,7 +359,66 @@ async def ws_llm(websocket: WebSocket):
 
 
 # ---------------------------------------------------------------------------
-# Startup: launch dispatcher background task
+# WebSocket: tts_interface.py
+# ---------------------------------------------------------------------------
+@app.websocket("/ws/tts")
+async def ws_tts(websocket: WebSocket):
+    await websocket.accept()
+    hub.tts_client = websocket
+    print("[Hub] tts_interface connected.")
+    await hub.broadcast_ui({"type": "status", "tts_connected": True})
+
+    try:
+        # TTS worker only receives; it doesn't send back to hub
+        await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        hub.tts_client = None
+        print("[Hub] tts_interface disconnected.")
+        await hub.broadcast_ui({"type": "status", "tts_connected": False})
+
+
+# ---------------------------------------------------------------------------
+# WebSocket: audiostreamer.py status reports
+# ---------------------------------------------------------------------------
+@app.websocket("/ws/audiostatus")
+async def ws_audiostatus(websocket: WebSocket):
+    await websocket.accept()
+    print("[Hub] audiostreamer connected (status reporter).")
+    await hub.broadcast_ui({"type": "status", "audio_connected": True})
+
+    try:
+        async for raw in websocket.iter_text():
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+
+            hub.audio_playing      = data.get("playing", False)
+            hub.audio_current_file = data.get("current_file", "")
+            hub.audio_queue_length = data.get("queue_length", 0)
+            hub.audio_volume       = data.get("volume", hub.audio_volume)
+
+            await hub.broadcast_ui({
+                "type":              "audio_status",
+                "playing":           hub.audio_playing,
+                "current_file":      hub.audio_current_file,
+                "audio_queue_length": hub.audio_queue_length,
+                "volume":            hub.audio_volume,
+            })
+
+    except WebSocketDisconnect:
+        pass
+    finally:
+        print("[Hub] audiostreamer disconnected.")
+        await hub.broadcast_ui({"type": "status", "audio_connected": False})
+
+
+# ---------------------------------------------------------------------------
+# Startup
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
 async def startup():

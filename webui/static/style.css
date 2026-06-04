@@ -25,6 +25,8 @@
   --blue:       #38bdf8;
   --blue-dim:   #0c4a6e;
   --purple:     #a78bfa;
+  --teal:       #2dd4bf;
+  --teal-dim:   #134e4a;
 
   --youtube:    #ff4040;
   --twitch:     #9147ff;
@@ -69,7 +71,7 @@ textarea { resize: vertical; }
 }
 
 .topbar-left  { display: flex; align-items: baseline; gap: 8px; }
-.topbar-center{ display: flex; align-items: center; gap: 8px; flex: 1; justify-content: center; }
+.topbar-center{ display: flex; align-items: center; gap: 6px; flex: 1; justify-content: center; }
 .topbar-right { display: flex; gap: 20px; }
 
 .logo {
@@ -85,7 +87,7 @@ textarea { resize: vertical; }
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 10px;
+  padding: 3px 8px;
   border: 1px solid var(--border);
   border-radius: 2px;
   background: var(--bg-3);
@@ -105,6 +107,8 @@ textarea { resize: vertical; }
 .status-pill.connected          { color: var(--text); border-color: var(--green-dim); }
 .status-pill.disconnected .dot  { background: var(--red); }
 .status-pill.disconnected       { border-color: var(--red-dim); }
+.status-pill.connecting .dot    { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
+.status-pill.connecting         { border-color: var(--amber-dim); }
 
 .metric { display: flex; flex-direction: column; align-items: flex-end; }
 .metric-label { font-size: 9px; font-family: var(--mono); color: var(--text-dim); letter-spacing: 0.1em; }
@@ -226,11 +230,9 @@ textarea { resize: vertical; }
   word-break: break-word;
 }
 
-/* flag button shown on hover */
 .msg-flag-btn {
   position: absolute;
-  top: 6px;
-  right: 6px;
+  top: 6px; right: 6px;
   background: none;
   border: 1px solid transparent;
   color: var(--text-dim);
@@ -404,6 +406,20 @@ textarea { resize: vertical; }
 }
 .btn-primary:hover { opacity: 0.85; }
 
+.btn-secondary {
+  background: var(--teal-dim);
+  color: var(--teal);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  border: 1px solid var(--teal);
+  flex: 1;
+  transition: background 0.15s;
+}
+.btn-secondary:hover { background: var(--teal); color: #000; }
+
 .btn-danger {
   background: var(--red-dim);
   color: var(--red);
@@ -460,9 +476,56 @@ textarea { resize: vertical; }
   font-size: 11px;
   color: var(--text);
 }
-.flag-item .flag-kind { font-family: var(--mono); font-size: 9px; color: var(--amber); }
+.flag-item .flag-kind   { font-family: var(--mono); font-size: 9px; color: var(--amber); }
 .flag-item .flag-reason { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
 .empty-hint { font-size: 11px; color: var(--text-dim); text-align: center; padding: 8px 0; }
+
+/* -- TTS card ------------------------------------------------------------- */
+#card-tts .card-title {
+  color: var(--teal);
+}
+
+.tts-playing-badge {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--teal);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.tts-playing-badge.hidden { display: none; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+.audio-now-playing {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--teal);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+#audio-now-playing.hidden { display: none; }
+
+.tts-btn-row {
+  flex-direction: row !important;
+  gap: 6px;
+}
+.tts-btn-row .btn-danger { flex: 1; width: auto; }
+
+.current-file-display {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 5px 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* -- Modal ---------------------------------------------------------------- */
 .modal-overlay {
@@ -504,3 +567,6 @@ textarea { resize: vertical; }
 .modal-actions { display: flex; gap: 8px; }
 .modal-actions .btn-danger,
 .modal-actions .btn-ghost { flex: 1; width: auto; }
+
+/* -- Utility -------------------------------------------------------------- */
+.hidden { display: none !important; }
